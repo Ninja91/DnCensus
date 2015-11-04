@@ -10,9 +10,9 @@ import cPickle as Pickle
 
 
 def index_ip6address_4_aaaa():
-    if os.path.isfile('index.pkl'):
+    if os.path.isfile('index.marisa'):
         print 'Loaded'
-        trie = Pickle.load('index.pkl')
+        trie = mt.Trie().load('index.marisa')
         print trie['::ffff:74.117.221.143']
         return [trie]
 
@@ -76,5 +76,5 @@ def build_map(ip6_trie_list, filename='../records/aaaa.csv'):
 
 
 dictionary = index_ip6address_4_aaaa()
-print dictionary['::ffff:74.117.221.143']
+# print dictionary['::ffff:74.117.221.143']
 # build_map(dictionary)
