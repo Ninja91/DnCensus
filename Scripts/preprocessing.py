@@ -2,8 +2,9 @@
 
 __author__ = 'Nitin'
 
+import threading
 import marisa_trie as mt
-from csv import DictReader
+import csv
 import os.path
 import marshal as Pickle
 from backports import lzma as lz
@@ -12,74 +13,36 @@ IP6_INDEX_FILE = '_ip6_index.marisa'
 NAME_INDEX_FILE = '_name_index.marisa'
 
 
-def index_ip6address_4_aaaa(filename='../records/aaaa.csv'):
-    ip6_index_fn = filename.replace('.csv', IP6_INDEX_FILE)
-    name_index_fn = filename.replace('.csv', NAME_INDEX_FILE)
-
-    if os.path.isfile(ip6_index_fn) and os.path.isfile(name_index_fn):
-        return [mt.Trie().load(NAME_INDEX_FILE)], [mt.Trie().load(IP6_INDEX_FILE)]
-        print 'Loaded'
-
-    ip6_list = []
-    name_list = []
-    name_trie_list = []
-    ip6_trie_list = []
+def build_map(all_name_index_trie, all_target_index_trie, filename='../records/aaaa.csv'):
+    filename = filename.replace('.csv', '.smat')
+    if os.path.isfile(filename):
+        print filename
+        print 'nnz = ', sum(1 for line in open(filename))
+        return None
 
     with open(filename, 'rb') as f:
-        print f
-        reader = DictReader(f)
-        print reader.fieldnames
-        i = 0
-
-        for row in reader:
-            i += 1
-            if i % 10000000 == 0:
-                print i
-                
-            ip6_list.append(row[reader.fieldnames[2]])
-            name_list.append(row[reader.fieldnames[0]])
-            # if len(ip6_list) > 14000000:
-            #     ip6_trie_list.append(mt.Trie(ip6_list))
-            #     ip6_list = []
-            #     print "Success"
-            #     break
-        ip6_trie_list.append(mt.Trie(ip6_list))
-        name_trie_list.append(mt.Trie(name_list))
-        ip6_trie_list[0].save(ip6_index_fn)
-        name_trie_list[0].save(name_index_fn)
-
-        print "Success"
-        return name_trie_list, ip6_trie_list
-
-
-def build_map(name_trie_list, ip6_trie_list, filename='../records/aaaa.csv'):
-    with open(filename, 'rb') as f:
-        print f
-        reader = DictReader(f)
-        current = None
-        current_host = None
+        reader = csv.reader(f)
+        next(reader)
+        current_target = None
+        current_name = None
         count = 0
         i = 0
 
-        triplets = []
-        if len(ip6_trie_list) == 1:
-            ip6_indexes = ip6_trie_list[0]
-            name_indexes = name_trie_list[0]
+        triplets = list()
 
         for row in reader:
             i += 1
+            # if i == 11:
+            #     break
             if i % 10000000 == 0:
                 print i
 
-            prev = current
-            current = row[reader.fieldnames[2]]
-            # print prev, current
-            prev_host = current_host
-            current_host = row[reader.fieldnames[0]]
-            # print prev_host, current_host
-            if prev_host != current_host and prev_host is not None:
-                triplets.append((name_indexes.key_id(unicode(prev_host)),
-                                 ip6_indexes.key_id(unicode(prev)),
+            prev_name, prev_target = current_name, current_target
+            current_name, current_target = row[0], row[2]
+
+            if prev_name != current_name and prev_name is not None:
+                triplets.append((all_name_index_trie.key_id(unicode(prev_name)),
+                                 all_target_index_trie.key_id(unicode(prev_target)),
                                  count))
 
                 # print prev_host, prev, count
@@ -87,9 +50,9 @@ def build_map(name_trie_list, ip6_trie_list, filename='../records/aaaa.csv'):
                 # values.append((ip6_indexes.key_id(unicode(prev)), count))
                 count = 1
             else:
-                if prev != current and prev is not None:
-                    triplets.append((name_indexes.key_id(unicode(prev_host)),
-                                     ip6_indexes.key_id(unicode(prev)),
+                if prev_target != current_target and prev_target is not None:
+                    triplets.append((all_name_index_trie.key_id(unicode(prev_name)),
+                                     all_target_index_trie.key_id(unicode(prev_target)),
                                      count))
 
                     # print prev_host, prev, count
@@ -98,11 +61,24 @@ def build_map(name_trie_list, ip6_trie_list, filename='../records/aaaa.csv'):
                     count = 1
                 else:
                     count += 1
+        triplets.append((all_name_index_trie.key_id(unicode(prev_name)),
+                         all_target_index_trie.key_id(unicode(prev_target)),
+                         count))
+        print filename
+        print 'nnz = ', len(triplets)
+        out_filename = filename.replace('.csv', '.smat')
+        t = threading.Thread(target=store_in_smat, args=(triplets, out_filename))
+        t.start()
+        return t
+        # store_in_smat(triplets, out_file)
+        # Pickle.dump(triplets, out_file)
+        # out_file.close()
 
-        out_file = open(filename.replace('.csv', '_triplets_all.pkl'), 'wb')
-        Pickle.dump(triplets, out_file)
-        out_file.close()
 
-# name_trie_list, ip6_trie_list = index_ip6address_4_aaaa()
+def store_in_smat(triplets, out_filename):
+    with open(out_filename, 'wb') as f:
+        for triplet in triplets:
+            f.write(str(triplet[0]) + ' ' + str(triplet[1]) + ' ' + str(triplet[2]) + '\n')
+# all_name_index_trie, all_target_index_trie = index_ip6address_4_aaaa()
 # # print dictionary['::ffff:74.117.221.143']
-# build_map(name_trie_list, ip6_trie_list)
+# build_map(all_name_index_trie, all_target_index_trie)
